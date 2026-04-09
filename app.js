@@ -18,15 +18,20 @@ function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
 
-  const headers = splitCSVLine(lines[0]);
+  const allHeaders = splitCSVLine(lines[0]);
+
+  // Keep only indexes where header is non-empty
+  const validIndexes = allHeaders
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h !== '');
 
   return lines.slice(1)
     .filter(l => l.trim())
     .map(line => {
       const values = splitCSVLine(line);
       const row = {};
-      headers.forEach((h, i) => {
-        if (h !== '') row[h] = (values[i] ?? '').trim();
+      validIndexes.forEach(({ h, i }) => {
+        row[h] = (values[i] ?? '').trim();
       });
       return row;
     });
