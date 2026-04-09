@@ -25,7 +25,9 @@ function parseCSV(text) {
     .map(line => {
       const values = splitCSVLine(line);
       const row = {};
-      headers.forEach((h, i) => { row[h] = (values[i] ?? '').trim(); });
+      headers.forEach((h, i) => {
+        if (h !== '') row[h] = (values[i] ?? '').trim();
+      });
       return row;
     });
 }
