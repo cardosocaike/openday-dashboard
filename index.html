@@ -5,9 +5,133 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard OpenDay</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Dashboard-specific styles */
+        header h1 { font-size: 1.1rem; }
+        .subtitle  { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+
+        /* KPI cards */
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+        .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
+        .kpi-card .label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin-bottom: 8px; }
+        .kpi-card .value { font-size: 1.8rem; font-weight: 700; color: var(--text-primary); line-height: 1; }
+
+        /* Two-column layout */
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+
+        /* Table card */
+        .table-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .table-card h2 { padding: 20px 24px 0; font-size: 0.95rem; }
+        .table-wrapper { overflow-x: auto; }
+        table th { background: var(--bg-secondary); }
+        table th:last-child,
+        table td:last-child { text-align: right; }
+        table td:nth-child(3),
+        table td:nth-child(4),
+        table td:nth-child(5),
+        table td:nth-child(6),
+        table td:nth-child(7),
+        table td:nth-child(8) { text-align: right; }
+
+        /* Chart card */
+        .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; }
+        .chart-card h2 { font-size: 0.95rem; margin-bottom: 20px; }
+        #leads-chart { display: block; width: 100%; height: 240px; }
+
+        /* Legend */
+        .chart-legend { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .legend-item  { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; }
+        .legend-dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .legend-label { color: var(--text-primary); flex: 1; }
+        .legend-val   { color: var(--text-secondary); white-space: nowrap; }
+
+        /* Status */
+        #status-msg { text-align: center; padding: 40px; font-size: 0.9rem; display: none; }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .kpi-grid       { grid-template-columns: repeat(2, 1fr); }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .chart-card     { order: -1; }
+            #leads-chart    { height: 280px; }
+        }
+        @media (max-width: 640px) {
+            .kpi-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
 </head>
 <body>
-    <h1>Dashboard OpenDay - Em Construção 🚀</h1>
-    <p>Versão inicial - em desenvolvimento</p>
+
+<header>
+    <div>
+        <h1>Dashboard OpenDay</h1>
+        <div class="subtitle">Meta Ads + CRM — atualizado automaticamente</div>
+    </div>
+    <button class="btn btn-ghost" onclick="init()" style="font-size:0.85rem">
+        &#8635; Atualizar
+    </button>
+</header>
+
+<main>
+    <p id="status-msg">Carregando dados...</p>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="label">Investimento</div>
+            <div class="value" id="kpi-spend">—</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Leads</div>
+            <div class="value" id="kpi-leads">—</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Cliques</div>
+            <div class="value" id="kpi-clicks">—</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">CPL Médio</div>
+            <div class="value" id="kpi-cpl">—</div>
+        </div>
+    </div>
+
+    <!-- Table + Chart -->
+    <div class="dashboard-grid">
+
+        <!-- Ads Table -->
+        <div class="table-card">
+            <h2>Anúncios OpenDay</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Ad Name</th>
+                            <th>Praça</th>
+                            <th>CTR</th>
+                            <th>Clicks</th>
+                            <th>CPM</th>
+                            <th>CPL</th>
+                            <th>Leads</th>
+                            <th>Investimento</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ads-tbody">
+                        <tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:40px">Carregando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pie Chart -->
+        <div class="chart-card">
+            <h2>Leads por Canal</h2>
+            <canvas id="leads-chart"></canvas>
+            <div class="chart-legend" id="chart-legend"></div>
+        </div>
+
+    </div>
+</main>
+
+<script src="app.js"></script>
 </body>
 </html>
