@@ -76,14 +76,13 @@ function filterMeta(rows) {
 }
 
 // ============================================================
-// 2. FILTER CRM — utm_campaign contains "openday" (case-insensitive)
-//    This ensures we only count leads that came from an openday campaign
+// 2. FILTER CRM — utm_campaign OR utm_content contains "openday" (case-insensitive)
+//    Matches: graduacao_grad-adm_lead_Openday_lf, etc.
 // ============================================================
 function filterCRM(rows) {
   return rows.filter(r =>
     String(r['utm_campaign'] || '').toLowerCase().includes('openday') ||
-    String(r['utm_content']  || '').toLowerCase().includes('openday') ||
-    String(r['Evento Completo'] || '').trim() !== ''  // any event lead counts
+    String(r['utm_content']  || '').toLowerCase().includes('openday')
   );
 }
 
@@ -138,8 +137,9 @@ function aggregateMeta(rows) {
 }
 
 // ============================================================
-// 4. Count CRM leads per Ad Name (matched via utm_content)
-//    Returns Map<adName, count>
+// 4. Count CRM leads per utm_content (= Ad Name no Meta)
+//    Returns Map<utm_content, count>
+//    O campo utm_content do CRM corresponde ao Ad Name do Meta Ads
 // ============================================================
 function buildLeadsMap(crmRows) {
   const map = new Map();
@@ -153,11 +153,17 @@ function buildLeadsMap(crmRows) {
 
 // ============================================================
 // 5. Merge Meta aggregates with CRM leads → final rows
+//    Join: Meta "Ad Name" === CRM "utm_content"
 // ============================================================
 function mergeData(metaAgg, leadsMap) {
   return metaAgg.map(a => {
-    const leads = leadsMap.get(a.adName) || 0;
-    const cpl   = leads > 0 ? a.spend / leads : null;
+    // Exact match first, then case-insensitive fallback
+    const leads =
+      leadsMap.get(a.adName) ||
+      leadsMap.get(a.adName.toLowerCase()) ||
+      [...leadsMap.entries()].find(([k]) => k.toLowerCase() === a.adName.toLowerCase())?.[1] ||
+      0;
+    const cpl = leads > 0 ? a.spend / leads : null;
     return { ...a, leads, cpl };
   });
 }
@@ -167,8 +173,9 @@ function mergeData(metaAgg, leadsMap) {
 // ============================================================
 function renderKPIs(rows, crmRows) {
   const totalSpend  = rows.reduce((s, r) => s + r.spend,  0);
-  const totalLeads  = rows.reduce((s, r) => s + r.leads,  0) || crmRows.length;
   const totalClicks = rows.reduce((s, r) => s + r.clicks, 0);
+  // Leads: total CRM filtrado é a fonte de verdade
+  const totalLeads  = crmRows.length;
   const globalCPL   = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
   setText('kpi-spend',  fmtBRL(totalSpend));
@@ -316,9 +323,9 @@ function renderInsights(rows, crmRows) {
 
   const withLeads = rows.filter(r => r.leads > 0 && r.cpl !== null);
 
-  // Global CPL
+  // Global CPL — leads vem do CRM filtrado (fonte de verdade)
   const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
-  const totalLeads = rows.reduce((s, r) => s + r.leads, 0) || crmRows.length;
+  const totalLeads = crmRows.length;
   const globalCPL  = totalLeads > 0 ? totalSpend / totalLeads : null;
 
   // Best creative (lowest CPL with at least 1 lead)
