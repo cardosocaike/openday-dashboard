@@ -119,13 +119,16 @@ function filterMeta(rows) {
 }
 
 // ============================================================
-// 2. FILTER CRM — utm_campaign OR utm_content contains "openday" (case-insensitive)
-//    Matches: graduacao_grad-adm_lead_Openday_lf, etc.
+// 2. FILTER CRM — any of:
+//    a) utm_campaign contains "openday"
+//    b) utm_content contains "openday"
+//    c) Evento Completo is non-empty (lead inscrito em algum evento)
 // ============================================================
 function filterCRM(rows) {
   return rows.filter(r =>
-    String(r['utm_campaign'] || '').toLowerCase().includes('openday') ||
-    String(r['utm_content']  || '').toLowerCase().includes('openday')
+    String(r['utm_campaign']     || '').toLowerCase().includes('openday') ||
+    String(r['utm_content']      || '').toLowerCase().includes('openday') ||
+    String(r['Evento Completo']  || '').trim() !== ''
   );
 }
 
