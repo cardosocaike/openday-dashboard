@@ -12,29 +12,61 @@ const CRM_CSV_URL =
 const CPL_ALERT = 150;
 
 // ============================================================
-// CSV parser — handles quoted fields with internal commas
+// CSV parser — Meta sheet has:
+//   - Row 1..2: may be empty/metadata (skip until header row found)
+//   - Column A: always empty (skip index 0)
+//   - Headers start at first non-empty row, data follows
 // ============================================================
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
+function parseCSV(text, opts = {}) {
+  const { skipFirstCol = false, headerRow = 0 } = opts;
 
-  const allHeaders = splitCSVLine(lines[0]);
+  // Split into non-empty lines, preserving original index
+  const rawLines = text.split(/\r?\n/);
 
-  // Keep only indexes where header is non-empty
-  const validIndexes = allHeaders
-    .map((h, i) => ({ h, i }))
-    .filter(({ h }) => h !== '');
-
-  return lines.slice(1)
-    .filter(l => l.trim())
-    .map(line => {
-      const values = splitCSVLine(line);
-      const row = {};
-      validIndexes.forEach(({ h, i }) => {
-        row[h] = (values[i] ?? '').trim();
-      });
-      return row;
+  // Find header row: first line that has at least 2 non-empty cells
+  let headerIdx = headerRow;
+  if (headerRow === 'auto') {
+    headerIdx = rawLines.findIndex(l => {
+      const cells = splitCSVLine(l);
+      return cells.filter(c => c.trim() !== '').length >= 2;
     });
+    if (headerIdx === -1) return [];
+  }
+
+  const headerLine = rawLines[headerIdx];
+  if (!headerLine) return [];
+
+  const allHeaders = splitCSVLine(headerLine);
+
+  // Build valid column index map: skip empty headers AND optionally col 0
+  const validIndexes = allHeaders
+    .map((h, i) => ({ h: h.trim(), i }))
+    .filter(({ h, i }) => h !== '' && !(skipFirstCol && i === 0));
+
+  // Data rows: everything after header, skip blank lines
+  const dataLines = rawLines
+    .slice(headerIdx + 1)
+    .filter(l => l.trim() !== '');
+
+  return dataLines.map(line => {
+    const values = splitCSVLine(line);
+    const row = {};
+    validIndexes.forEach(({ h, i }) => {
+      row[h] = (values[i] ?? '').trim();
+    });
+    return row;
+  });
+}
+
+// Convenience wrappers
+function parseMetaCSV(text) {
+  // Meta export: col A is empty, headers are on row 0, data from row 1
+  return parseCSV(text, { skipFirstCol: true, headerRow: 'auto' });
+}
+
+function parseCRMCSV(text) {
+  // CRM export: normal CSV, no empty first column
+  return parseCSV(text, { skipFirstCol: false, headerRow: 0 });
 }
 
 function splitCSVLine(line) {
@@ -72,11 +104,12 @@ function fmtPct(n) {
 }
 
 // ============================================================
-// 1. FILTER META — Campaign Name contains "openday" (case-insensitive)
+// 1. FILTER META — Campaign Name === 'openday' (exact, case-insensitive)
+//    Rejects: graduacao_nextgen_*, graduacao_grad-adm_*, etc.
 // ============================================================
 function filterMeta(rows) {
   return rows.filter(r =>
-    String(r['Campaign Name'] || '').toLowerCase() === 'openday'
+    String(r['Campaign Name'] || '').trim().toLowerCase() === 'openday'
   );
 }
 
@@ -439,14 +472,15 @@ async function init() {
       fetchCSV(CRM_CSV_URL),
     ]);
 
-    const allMeta = parseCSV(metaText);
-    const allCRM  = parseCSV(crmText);
+    const allMeta = parseMetaCSV(metaText);
+    const allCRM  = parseCRMCSV(crmText);
 
     // Debug
     console.log('[Meta] Colunas:', Object.keys(allMeta[0] || {}));
     console.log('[CRM]  Colunas:', Object.keys(allCRM[0]  || {}));
     console.log(`[Meta] Total linhas: ${allMeta.length}`);
     console.log(`[CRM]  Total linhas: ${allCRM.length}`);
+    console.log('Campaign Name values:', allMeta.map(r => r['Campaign Name']).slice(0, 10));
 
     // Filter
     const metaRows = filterMeta(allMeta);
