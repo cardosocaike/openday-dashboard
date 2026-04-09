@@ -86,6 +86,14 @@ function filterCRM(rows) {
 }
 
 // ============================================================
+// Helper — finds a column by partial key match (case-insensitive)
+// ============================================================
+function findColumn(row, keyword) {
+  const kw = keyword.toLowerCase();
+  return Object.entries(row).find(([k]) => k.toLowerCase().includes(kw))?.[1] ?? 0;
+}
+
+// ============================================================
 // 3. Aggregate Meta rows by Ad Name
 //    Returns array of { adName, campaignName, adSetName, day,
 //    spend, impressions, cpm, clicks, ctr }
@@ -113,8 +121,8 @@ function aggregateMeta(rows) {
     agg.spend       += parseNum(r['Amount Spent']);
     agg.impressions += parseNum(r['Impressions']);
     agg.clicks      += parseNum(r['Link Clicks']);
-    agg.cpmSum      += parseNum(r['CPM']);
-    agg.ctrSum      += parseNum(r['CTR']);
+    agg.cpmSum      += parseNum(findColumn(r, 'CPM'));
+    agg.ctrSum      += parseNum(findColumn(r, 'CTR'));
     agg.count       += 1;
     // Keep last day (or could keep first)
     if (r['Day']) agg.day = r['Day'];
