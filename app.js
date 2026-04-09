@@ -76,7 +76,7 @@ function fmtPct(n) {
 // ============================================================
 function filterMeta(rows) {
   return rows.filter(r =>
-    String(r['Campaign Name'] || '').toLowerCase().includes('openday')
+    String(r['Campaign Name'] || '').toLowerCase() === 'openday'
   );
 }
 
