@@ -12,25 +12,29 @@ const CRM_CSV_URL =
 const CPL_ALERT = 150;
 
 // ============================================================
-// CSV parser — Meta sheet has:
-//   - Row 1..2: may be empty/metadata (skip until header row found)
-//   - Column A: always empty (skip index 0)
-//   - Headers start at first non-empty row, data follows
+// CSV parser
+// opts.skipFirstCol: skip column index 0 (Meta has empty col A)
+// opts.headerMarker: find header row by looking for this string in any cell
+// opts.headerRow: fixed row index (0-based) for header; default 0
 // ============================================================
 function parseCSV(text, opts = {}) {
-  const { skipFirstCol = false, headerRow = 0 } = opts;
+  const { skipFirstCol = false, headerMarker = null, headerRow = 0 } = opts;
 
-  // Split into non-empty lines, preserving original index
   const rawLines = text.split(/\r?\n/);
 
-  // Find header row: first line that has at least 2 non-empty cells
-  let headerIdx = headerRow;
-  if (headerRow === 'auto') {
-    headerIdx = rawLines.findIndex(l => {
-      const cells = splitCSVLine(l);
-      return cells.filter(c => c.trim() !== '').length >= 2;
-    });
-    if (headerIdx === -1) return [];
+  // Locate the header row
+  let headerIdx;
+  if (headerMarker !== null) {
+    // Find first row where any cell exactly matches the marker (case-insensitive)
+    headerIdx = rawLines.findIndex(l =>
+      splitCSVLine(l).some(c => c.trim().toLowerCase() === headerMarker.toLowerCase())
+    );
+    if (headerIdx === -1) {
+      console.warn('[parseCSV] Header marker not found:', headerMarker);
+      return [];
+    }
+  } else {
+    headerIdx = headerRow;
   }
 
   const headerLine = rawLines[headerIdx];
@@ -38,12 +42,12 @@ function parseCSV(text, opts = {}) {
 
   const allHeaders = splitCSVLine(headerLine);
 
-  // Build valid column index map: skip empty headers AND optionally col 0
+  // Keep only columns with non-empty headers, optionally skip col 0
   const validIndexes = allHeaders
     .map((h, i) => ({ h: h.trim(), i }))
     .filter(({ h, i }) => h !== '' && !(skipFirstCol && i === 0));
 
-  // Data rows: everything after header, skip blank lines
+  // Data: all non-blank lines after the header
   const dataLines = rawLines
     .slice(headerIdx + 1)
     .filter(l => l.trim() !== '');
@@ -58,14 +62,13 @@ function parseCSV(text, opts = {}) {
   });
 }
 
-// Convenience wrappers
+// Meta: col A is empty, header row contains "Day" as one of the cells
 function parseMetaCSV(text) {
-  // Meta export: col A is empty, headers are on row 0, data from row 1
-  return parseCSV(text, { skipFirstCol: true, headerRow: 'auto' });
+  return parseCSV(text, { skipFirstCol: true, headerMarker: 'Day' });
 }
 
+// CRM: standard CSV, header on row 0
 function parseCRMCSV(text) {
-  // CRM export: normal CSV, no empty first column
   return parseCSV(text, { skipFirstCol: false, headerRow: 0 });
 }
 
@@ -107,9 +110,11 @@ function fmtPct(n) {
 // 1. FILTER META — Campaign Name === 'openday' (exact, case-insensitive)
 //    Rejects: graduacao_nextgen_*, graduacao_grad-adm_*, etc.
 // ============================================================
+// Campaign Name real: "graduacao_grad-adm_lead_Openday_lf"
+// Usar toLowerCase() para não depender de capitalização exata
 function filterMeta(rows) {
   return rows.filter(r =>
-    String(r['Campaign Name'] || '').includes('OpenDay')
+    String(r['Campaign Name'] || '').toLowerCase().includes('openday')
   );
 }
 
