@@ -329,42 +329,44 @@ function renderTable(rows) {
     // Caso 1 — Meta-only (sem leads CRM):      "—"
     // Caso 2 — CRM-only (sem dados Meta):       utm_content → canal → "Direto"
     // Caso 3 — Meta + CRM casados:             utm_content (adNameCRM)
-    let adNameCRM;
+    let adNameCRMContent, adNameCRMTitle;
     if (!r.crmOnly && !r.adNameCRM) {
-      // Meta-only: nenhum lead CRM casou com este anúncio
-      adNameCRM = '<span style="color:var(--text-secondary)">—</span>';
+      adNameCRMContent = '<span style="color:var(--text-secondary)">—</span>';
+      adNameCRMTitle   = '';
     } else if (r.adNameCRM) {
-      // Casado ou CRM-only com utm_content válido
-      adNameCRM = trunc(r.adNameCRM, 32);
+      adNameCRMContent = truncate(r.adNameCRM, 30);
+      adNameCRMTitle   = r.adNameCRM;
     } else if (r.channel) {
-      // CRM-only sem utm_content, mas com canal (utm_medium)
-      adNameCRM = `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`;
+      adNameCRMContent = `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`;
+      adNameCRMTitle   = r.channel;
     } else {
-      // CRM-only sem nenhuma informação de origem
-      adNameCRM = '<span style="color:var(--text-secondary);font-style:italic">Direto</span>';
+      adNameCRMContent = '<span style="color:var(--text-secondary);font-style:italic">Direto</span>';
+      adNameCRMTitle   = '';
     }
 
     // ── Células Meta (vazias para linhas CRM-only) ──
-    const dayCell      = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : r.day;
-    const campaignCell = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : `<span title="${r.campaignName}">${trunc(r.campaignName, 22)}</span>`;
-    const adSetCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : `<span title="${r.adSetName}">${trunc(r.adSetName, 22)}</span>`;
-    const adNameMeta   = r.crmOnly
-      ? '<span style="color:var(--text-secondary);font-style:italic">Sem dado Meta</span>'
-      : `<span title="${r.adName}">${trunc(r.adName, 32)}</span>`;
-
+    const dayCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : r.day;
     const spendCell  = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtBRL(r.spend);
     const impCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtNum(r.impressions);
     const cpmCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtBRL(r.cpm);
     const clkCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtNum(r.clicks);
     const ctrCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtPct(r.ctr);
 
+    // Texto truncado + title no <td> para tooltip nativo
+    // removePrefix elimina "graduacao_grad-adm_" de Ad Set e Ad Name antes de truncar
+    const campaignTxt = r.crmOnly ? '—' : truncate(r.campaignName, 30);
+    const adSetTxt    = r.crmOnly ? '—' : truncate(removePrefix(r.adSetName,    AD_PREFIX), 25);
+    const adNameTxt   = r.crmOnly
+      ? '<span style="color:var(--text-secondary);font-style:italic">Sem dado Meta</span>'
+      : truncate(removePrefix(r.adName, AD_PREFIX), 35);
+
     return `
     <tr class="${r.crmOnly ? 'row-crm-only' : ''}">
       <td>${dayCell}</td>
-      <td>${campaignCell}</td>
-      <td>${adSetCell}</td>
-      <td>${adNameMeta}</td>
-      <td>${adNameCRM}</td>
+      <td class="cell-truncate" title="${r.crmOnly ? '' : r.campaignName}">${campaignTxt}</td>
+      <td class="cell-truncate" title="${r.crmOnly ? '' : r.adSetName}">${adSetTxt}</td>
+      <td class="cell-truncate" title="${r.crmOnly ? '' : r.adName}">${adNameTxt}</td>
+      <td class="cell-truncate" title="${adNameCRMTitle}">${adNameCRMContent}</td>
       <td class="num">${spendCell}</td>
       <td class="num">${impCell}</td>
       <td class="num">${cpmCell}</td>
@@ -384,9 +386,23 @@ function cplClass(cpl) {
   return 'cpl-bad';
 }
 
-function trunc(s, n) {
-  return s.length > n ? s.slice(0, n) + '…' : s;
+/** Remove prefixo do início do texto (case-sensitive) */
+function removePrefix(text, prefix) {
+  if (!text) return text || '';
+  return text.startsWith(prefix) ? text.slice(prefix.length) : text;
 }
+
+/** Trunca no espaço mais próximo antes de maxChars; adiciona "…" */
+function truncate(text, maxChars) {
+  if (!text || text.length <= maxChars) return text || '';
+  const cut = text.lastIndexOf(' ', maxChars);
+  return (cut > maxChars * 0.6 ? text.slice(0, cut) : text.slice(0, maxChars)) + '…';
+}
+
+// Alias interno para compatibilidade com chamadas legadas
+function trunc(s, n) { return truncate(s, n); }
+
+const AD_PREFIX = 'graduacao_grad-adm_';
 
 // ============================================================
 // 8. Render pie/donut chart — leads by utm_medium (canal)
