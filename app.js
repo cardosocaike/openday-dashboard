@@ -513,81 +513,122 @@ function renderChart(crmRows) {
 }
 
 // ============================================================
-// 9. Render Insights panel
+// 9. Render Insights panel — 2×2 grid
 // ============================================================
 function renderInsights(rows, crmRows) {
   const el = document.getElementById('insights');
   if (!el) return;
 
-  const withLeads = rows.filter(r => r.leads > 0 && r.cpl !== null);
-
-  // Global CPL — leads vem do CRM filtrado (fonte de verdade)
+  // ── Dados base ──────────────────────────────────────────────
   const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
   const totalLeads = crmRows.length;
   const globalCPL  = totalLeads > 0 ? totalSpend / totalLeads : null;
 
-  // Best creative (lowest CPL with at least 1 lead)
-  const best = withLeads.length
-    ? withLeads.reduce((a, b) => a.cpl < b.cpl ? a : b)
-    : null;
-
-  // City performance from CRM (Evento Completo → extract city)
-  const cityMap = {};
+  // Leads e spend por praça (fonte CRM + merge com Meta)
+  const cityLeads = {};   // city → count
+  const citySpend = {};   // city → spend (dos rows mesclados)
   crmRows.forEach(r => {
-    const ev = r['Evento Completo'] || '';
-    const city = ev.split('-')[0].trim() || 'Outros';
-    cityMap[city] = (cityMap[city] || 0) + 1;
+    const city = cityFromEventoCompleto(r['Evento Completo']) || 'Outros';
+    cityLeads[city] = (cityLeads[city] || 0) + 1;
   });
-  const cities = Object.entries(cityMap).sort((a, b) => b[1] - a[1]);
-  const bestCity  = cities[0]  || null;
-  const worstCity = cities[cities.length - 1] || null;
+  rows.forEach(r => {
+    if (!r.spend) return;
+    const city = cityFromAdSetSlug(r.adSetName || '') || 'Outros';
+    citySpend[city] = (citySpend[city] || 0) + r.spend;
+  });
 
-  // CPL alerts — creatives above threshold
-  const alerts = withLeads.filter(r => r.cpl > CPL_ALERT);
+  // CPL por praça
+  const cityList = Object.keys(cityLeads).sort();
+  const cityStats = cityList.map(city => {
+    const leads = cityLeads[city] || 0;
+    const spend = citySpend[city] || 0;
+    const cpl   = leads > 0 ? spend / leads : null;
+    return { city, leads, spend, cpl };
+  }).sort((a, b) => b.leads - a.leads);
 
-  const lines = [];
+  // Melhor criativo por cidade (menor CPL, mín. 1 lead)
+  const bestCreativeByCity = {};
+  rows.forEach(r => {
+    if (!r.leads || r.cpl === null) return;
+    const city = cityFromAdSetSlug(r.adSetName || '') || 'Outros';
+    if (!bestCreativeByCity[city] || r.cpl < bestCreativeByCity[city].cpl) {
+      bestCreativeByCity[city] = r;
+    }
+  });
 
-  if (globalCPL !== null) {
-    lines.push(insightCard('CPL Global', fmtBRL(globalCPL), globalCPL <= CPL_ALERT ? 'good' : 'bad',
-      `Base: ${fmtNum(totalLeads)} leads / ${fmtBRL(totalSpend)} investidos`));
-  }
+  // ── Quadrante 1: CPL Global ──────────────────────────────────
+  const q1 = insightQuad(
+    'CPL Global',
+    globalCPL !== null
+      ? `<span class="iq-kpi ${globalCPL <= CPL_ALERT ? 'iq-good' : 'iq-bad'}">${fmtBRL(globalCPL)}</span>`
+      : '<span class="iq-empty">Sem dados</span>',
+    globalCPL !== null
+      ? `<div class="iq-sub-row"><span>${fmtNum(totalLeads)} leads</span><span>${fmtBRL(totalSpend)} investidos</span></div>`
+      : ''
+  );
 
-  if (best) {
-    lines.push(insightCard('Melhor Criativo', trunc(best.adName, 36), 'good',
-      `CPL ${fmtBRL(best.cpl)} &middot; ${fmtNum(best.leads)} leads`));
-  }
+  // ── Quadrante 2: CPL por Praça ───────────────────────────────
+  const cplRows = cityStats.length
+    ? cityStats.map(s => {
+        const cls = s.cpl === null ? '' : s.cpl <= CPL_ALERT ? 'iq-good' : 'iq-bad';
+        return `
+          <div class="iq-city-row">
+            <span class="iq-city-name">${s.city}</span>
+            <span class="iq-city-leads">${fmtNum(s.leads)} leads</span>
+            <span class="iq-city-cpl ${cls}">${s.cpl !== null ? fmtBRL(s.cpl) : '—'}</span>
+          </div>`;
+      }).join('')
+    : '<span class="iq-empty">Sem dados por praça</span>';
 
-  if (bestCity) {
-    lines.push(insightCard('Melhor Cidade', bestCity[0], 'good',
-      `${fmtNum(bestCity[1])} leads`));
-  }
+  const q2 = insightQuad('CPL por Praça', cplRows, '');
 
-  if (worstCity && worstCity[0] !== (bestCity && bestCity[0])) {
-    lines.push(insightCard('Cidade com Menos Leads', worstCity[0], 'warn',
-      `${fmtNum(worstCity[1])} leads`));
-  }
+  // ── Quadrante 3: Volume de Leads por Cidade ──────────────────
+  const maxLeads = cityStats[0]?.leads || 1;
+  const leadsRows = cityStats.length
+    ? cityStats.map((s, i) => {
+        const pct = Math.round((s.leads / maxLeads) * 100);
+        const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        return `
+          <div class="iq-bar-row">
+            <span class="iq-bar-rank">${rank}</span>
+            <span class="iq-bar-label">${s.city}</span>
+            <div class="iq-bar-wrap">
+              <div class="iq-bar-fill" style="width:${pct}%"></div>
+            </div>
+            <span class="iq-bar-val">${fmtNum(s.leads)}</span>
+          </div>`;
+      }).join('')
+    : '<span class="iq-empty">Sem dados</span>';
 
-  if (alerts.length) {
-    alerts.forEach(r => {
-      lines.push(insightCard('Alerta CPL Alto', trunc(r.adName, 36), 'bad',
-        `CPL ${fmtBRL(r.cpl)} — acima do limite de ${fmtBRL(CPL_ALERT)}`));
-    });
-  }
+  const q3 = insightQuad('Volume de Leads por Cidade', leadsRows, '');
 
-  el.innerHTML = lines.length
-    ? lines.join('')
-    : '<p style="color:var(--text-secondary)">Sem dados suficientes para insights.</p>';
+  // ── Quadrante 4: Melhor Criativo por Cidade ──────────────────
+  const creativeRows = Object.keys(bestCreativeByCity).length
+    ? Object.entries(bestCreativeByCity)
+        .sort((a, b) => b[1].leads - a[1].leads)
+        .map(([city, r]) => `
+          <div class="iq-creative-row">
+            <span class="iq-creative-city">${city}</span>
+            <span class="iq-creative-name">${removePrefix(r.adName, AD_PREFIX) || r.adName}</span>
+            <span class="iq-creative-stats">
+              <span class="iq-good">${fmtBRL(r.cpl)}</span>
+              <span class="iq-muted">&middot; ${fmtNum(r.leads)} leads</span>
+            </span>
+          </div>`).join('')
+    : '<span class="iq-empty">Sem dados de criativo</span>';
+
+  const q4 = insightQuad('Melhor Criativo por Cidade', creativeRows, '');
+
+  el.innerHTML = q1 + q2 + q3 + q4;
 }
 
-function insightCard(title, value, type, detail) {
-  const colors = { good: 'var(--success)', bad: 'var(--danger)', warn: 'var(--warning)' };
+function insightQuad(title, bodyHtml, footerHtml) {
   return `
-    <div class="insight-card">
-      <div class="insight-title">${title}</div>
-      <div class="insight-value" style="color:${colors[type]}">${value}</div>
-      <div class="insight-detail">${detail}</div>
-    </div>
-  `;
+    <div class="insight-quad">
+      <div class="iq-header">${title}</div>
+      <div class="iq-body">${bodyHtml}</div>
+      ${footerHtml ? `<div class="iq-footer">${footerHtml}</div>` : ''}
+    </div>`;
 }
 
 // ============================================================

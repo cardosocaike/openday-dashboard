@@ -316,42 +316,151 @@
         .legend-label { color: var(--text-primary); flex: 1; }
         .legend-val   { color: var(--text-secondary); white-space: nowrap; font-family: var(--font-mono); font-size: 0.8rem; }
 
-        /* ── Insights ── */
+        /* ── Insights 2×2 ── */
         .insights-section { margin-top: var(--sp-1); }
         .insights-section h2 { font-size: 0.92rem; margin-bottom: var(--sp-3); }
+
         #insights {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: var(--sp-3);
         }
-        .insight-card {
+
+        .insight-quad {
             background: var(--grad-card);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
-            padding: var(--sp-3) var(--sp-3);
+            padding: var(--sp-3) var(--sp-4);
             box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: var(--sp-2);
             transition: transform var(--transition), box-shadow var(--transition);
         }
-        .insight-card:hover {
+        .insight-quad:hover {
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
         }
-        .insight-title  {
-            font-size: 0.68rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.09em;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-        }
-        .insight-value  {
+        /* accent bar top */
+        .insight-quad:nth-child(odd)  { border-top: 3px solid var(--orange); }
+        .insight-quad:nth-child(even) { border-top: 3px solid var(--navy-mid); }
+
+        .iq-header {
             font-family: var(--font-display);
-            font-size: 1.05rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-secondary);
+        }
+        .iq-body { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .iq-footer { border-top: 1px solid var(--border); padding-top: var(--sp-2); }
+
+        /* KPI grande (quadrante 1) */
+        .iq-kpi {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .iq-good  { color: var(--green); }
+        .iq-bad   { color: var(--red);   }
+        .iq-muted { color: var(--text-secondary); }
+        .iq-empty { font-size: 0.82rem; color: var(--text-muted); font-style: italic; }
+
+        .iq-sub-row {
+            display: flex;
+            gap: var(--sp-3);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: var(--sp-1);
+        }
+
+        /* CPL por praça (quadrante 2) */
+        .iq-city-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: var(--sp-2);
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.82rem;
+        }
+        .iq-city-row:last-child { border-bottom: none; }
+        .iq-city-name  { color: var(--text-primary); }
+        .iq-city-leads { color: var(--text-secondary); font-size: 0.75rem; text-align: right; }
+        .iq-city-cpl   {
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-align: right;
+            min-width: 80px;
+        }
+
+        /* Barra de leads (quadrante 3) */
+        .iq-bar-row {
+            display: grid;
+            grid-template-columns: 22px 1fr 80px 36px;
+            gap: var(--sp-2);
+            align-items: center;
+            font-size: 0.82rem;
+            padding: 4px 0;
+        }
+        .iq-bar-rank  { font-size: 0.78rem; color: var(--text-secondary); }
+        .iq-bar-label { color: var(--text-primary); }
+        .iq-bar-wrap  {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            height: 6px;
+            overflow: hidden;
+        }
+        .iq-bar-fill  {
+            height: 100%;
+            background: var(--grad-orange);
+            border-radius: 4px;
+            transition: width 0.4s var(--ease);
+        }
+        .iq-bar-val {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        /* Melhor criativo por cidade (quadrante 4) */
+        .iq-creative-row {
+            display: grid;
+            grid-template-columns: 90px 1fr auto;
+            gap: var(--sp-2);
+            align-items: baseline;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.82rem;
+        }
+        .iq-creative-row:last-child { border-bottom: none; }
+        .iq-creative-city {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .iq-creative-name {
+            color: var(--text-primary);
             word-break: break-word;
         }
-        .insight-detail { font-size: 0.78rem; color: var(--text-secondary); }
+        .iq-creative-stats {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            white-space: nowrap;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+        }
+
+        @media (max-width: 768px) {
+            #insights { grid-template-columns: 1fr; }
+        }
 
         /* ── Status ── */
         #status-msg {
