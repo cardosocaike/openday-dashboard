@@ -240,23 +240,22 @@ function mergeData(metaAgg, crmRows) {
 
   // ── Linhas que têm dados no Meta ──────────────────────────
   const metaRows = metaAgg.map(a => {
-    const leads =
-      leadsMap.get(a.adName) ||
-      leadsMap.get(a.adName.toLowerCase()) ||
-      [...leadsMap.entries()].find(([k]) => k.toLowerCase() === a.adName.toLowerCase())?.[1] ||
-      0;
-    // adNameCRM: utm_content que casou (usa o key exato do leadsMap)
+    // Encontra a chave exata no leadsMap (case-insensitive)
     const matchedKey =
-      leadsMap.has(a.adName)             ? a.adName :
+      leadsMap.has(a.adName)               ? a.adName :
       leadsMap.has(a.adName.toLowerCase()) ? a.adName.toLowerCase() :
-      [...leadsMap.keys()].find(k => k.toLowerCase() === a.adName.toLowerCase()) || '';
+      [...leadsMap.keys()].find(k => k.toLowerCase() === a.adName.toLowerCase()) || null;
 
-    const cpl = leads > 0 ? a.spend / leads : null;
+    const leads = matchedKey ? (leadsMap.get(matchedKey) || 0) : 0;
+    const cpl   = leads > 0 ? a.spend / leads : null;
+
+    // Caso 1 — Meta-only (nenhum CRM casou): adNameCRM = vazio
+    // Caso 3 — Meta + CRM casados:           adNameCRM = utm_content (matchedKey)
     return {
       ...a,
       leads,
       cpl,
-      adNameCRM: matchedKey || '',   // coluna "AD NAME (CRM)"
+      adNameCRM: matchedKey || '',   // '' → Meta-only; valor → casado
       channel:   matchedKey ? (crmGroups.get(matchedKey)?.channel || '') : '',
       crmOnly:   false,
     };
@@ -327,12 +326,23 @@ function renderTable(rows) {
 
   tbody.innerHTML = sorted.map(r => {
     // ── Coluna AD NAME (CRM) ──
-    // Prioridade: utm_content normalizado → canal (utm_medium) → "Direto"
-    const adNameCRM = r.adNameCRM
-      ? trunc(r.adNameCRM, 32)
-      : r.channel
-        ? `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`
-        : '<span style="color:var(--text-secondary);font-style:italic">Direto</span>';
+    // Caso 1 — Meta-only (sem leads CRM):      "—"
+    // Caso 2 — CRM-only (sem dados Meta):       utm_content → canal → "Direto"
+    // Caso 3 — Meta + CRM casados:             utm_content (adNameCRM)
+    let adNameCRM;
+    if (!r.crmOnly && !r.adNameCRM) {
+      // Meta-only: nenhum lead CRM casou com este anúncio
+      adNameCRM = '<span style="color:var(--text-secondary)">—</span>';
+    } else if (r.adNameCRM) {
+      // Casado ou CRM-only com utm_content válido
+      adNameCRM = trunc(r.adNameCRM, 32);
+    } else if (r.channel) {
+      // CRM-only sem utm_content, mas com canal (utm_medium)
+      adNameCRM = `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`;
+    } else {
+      // CRM-only sem nenhuma informação de origem
+      adNameCRM = '<span style="color:var(--text-secondary);font-style:italic">Direto</span>';
+    }
 
     // ── Células Meta (vazias para linhas CRM-only) ──
     const dayCell      = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : r.day;
