@@ -472,27 +472,82 @@ async function fetchCSV(url) {
 }
 
 // ============================================================
+// PRAÇA — normalização e extração
+//
+// Meta Ad Set Name usa slug:  "evento-saopaulo-1104"  → "São Paulo"
+// CRM Evento Completo usa:    "São Paulo - 11/04/2026" → "São Paulo"
+//
+// Normalizar para lowercase+sem acento permite comparar as duas fontes.
+// ============================================================
+
+// Slug → cidade legível (cobre as praças conhecidas do dataset)
+const SLUG_TO_CITY = {
+  saopaulo:  'São Paulo',
+  fortaleza: 'Fortaleza',
+  salvador:  'Salvador',
+  recife:    'Recife',
+  riodejaneiro: 'Rio de Janeiro',
+  belo:      'Belo Horizonte',   // "belo-horizonte"
+  horizonte: 'Belo Horizonte',
+  curitiba:  'Curitiba',
+  manaus:    'Manaus',
+  belem:     'Belém',
+  goiania:   'Goiânia',
+  portoalegre: 'Porto Alegre',
+};
+
+/** "evento-saopaulo-1104" → "São Paulo"  |  null se não reconhecer */
+function cityFromAdSetSlug(adSetName) {
+  // Procura segmento que começa com "evento-"
+  const match = adSetName.toLowerCase().match(/evento-([a-z]+)/);
+  if (!match) return null;
+  const slug = match[1];
+  return SLUG_TO_CITY[slug] || slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
+/** "Fortaleza - 25/04/2026" → "Fortaleza" */
+function cityFromEventoCompleto(ev) {
+  if (!ev || !ev.trim()) return null;
+  return ev.split('-')[0].trim() || null;
+}
+
+/** Normaliza string para comparação: lowercase, sem acento, sem espaço extra */
+function normCity(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+// ============================================================
 // FILTERS — populate dropdowns from raw data
 // ============================================================
 
-/** Extract unique praças from CRM "Evento Completo" (text before first "-") */
+/** Praças únicas — fonte: CRM Evento Completo (exibição) */
 function extractPracas(crmRows) {
   const set = new Set();
   crmRows.forEach(r => {
-    const ev = (r['Evento Completo'] || '').trim();
-    if (!ev) return;
-    const praca = ev.split('-')[0].trim();
-    if (praca) set.add(praca);
+    const city = cityFromEventoCompleto(r['Evento Completo']);
+    if (city) set.add(city);
   });
   return [...set].sort();
 }
 
-/** Extract unique Ad Names from Meta rows */
-function extractCriativos(metaRows) {
+/**
+ * Ad Names únicos do Meta — filtrados pela praça se informada.
+ * Usa cityFromAdSetSlug para identificar quais Ad Sets pertencem à praça.
+ */
+function extractCriativos(metaRows, praca) {
   const set = new Set();
+  const normPraca = normCity(praca);
   metaRows.forEach(r => {
     const name = (r['Ad Name'] || '').trim();
-    if (name) set.add(name);
+    if (!name) return;
+    if (praca) {
+      const city = cityFromAdSetSlug(r['Ad Set Name'] || '');
+      if (!city || normCity(city) !== normPraca) return;
+    }
+    set.add(name);
   });
   return [...set].sort();
 }
@@ -508,12 +563,21 @@ function populateSelect(id, options) {
     o.textContent = opt;
     el.appendChild(o);
   });
-  if ([...el.options].some(o => o.value === current)) el.value = current;
+  // Mantém seleção atual apenas se ainda existir nas novas opções
+  el.value = [...el.options].some(o => o.value === current) ? current : '';
 }
 
 function populateFilters() {
-  populateSelect('filter-praca',    extractPracas(_rawCRM));
-  populateSelect('filter-criativo', extractCriativos(_rawMeta));
+  populateSelect('filter-praca', extractPracas(_rawCRM));
+  // Criativos sem filtro de praça ainda (será re-populado no onChange de praça)
+  populateSelect('filter-criativo', extractCriativos(_rawMeta, ''));
+}
+
+/** Chamado quando o select de praça muda — re-popula criativos */
+function onPracaChange() {
+  const praca = (document.getElementById('filter-praca') || {}).value || '';
+  populateSelect('filter-criativo', extractCriativos(_rawMeta, praca));
+  applyFilters();
 }
 
 // ============================================================
@@ -537,6 +601,8 @@ function clearFilters() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Restaura todos os criativos
+  populateSelect('filter-criativo', extractCriativos(_rawMeta, ''));
   const chk = document.getElementById('chk-compare');
   if (chk) { chk.checked = false; toggleComparativo(false); }
   applyFilters();
@@ -562,13 +628,25 @@ function parseDate(str) {
 
 function applyFilters() {
   const f = getFilters();
+  const normPraca = normCity(f.praca);
 
-  // --- Filter Meta rows ---
+  // ── Meta rows ──────────────────────────────────────────────
   let metaRows = _rawMeta.slice();
 
+  // Filtro praça: Ad Set Name deve conter a cidade selecionada
+  if (f.praca) {
+    metaRows = metaRows.filter(r => {
+      const city = cityFromAdSetSlug(r['Ad Set Name'] || '');
+      return city ? normCity(city) === normPraca : false;
+    });
+  }
+
+  // Filtro criativo (Ad Name)
   if (f.criativo) {
     metaRows = metaRows.filter(r => (r['Ad Name'] || '') === f.criativo);
   }
+
+  // Filtro data (coluna "Day" no Meta, formato YYYY-MM-DD)
   if (f.dateStart || f.dateEnd) {
     const start = parseDate(f.dateStart);
     const end   = parseDate(f.dateEnd);
@@ -581,34 +659,36 @@ function applyFilters() {
     });
   }
 
-  // --- Filter CRM rows ---
+  // ── CRM rows ───────────────────────────────────────────────
   let crmRows = _rawCRM.slice();
 
+  // Filtro praça: Evento Completo deve ter a mesma cidade
   if (f.praca) {
     crmRows = crmRows.filter(r => {
-      const ev = (r['Evento Completo'] || '').trim();
-      return ev.split('-')[0].trim() === f.praca;
+      const city = cityFromEventoCompleto(r['Evento Completo']);
+      return city ? normCity(city) === normPraca : false;
     });
   }
+
+  // Filtro criativo: utm_content deve ser igual ao Ad Name
+  if (f.criativo) {
+    crmRows = crmRows.filter(r => (r['utm_content'] || '').trim() === f.criativo);
+  }
+
+  // Filtro data (coluna "Data" no CRM, formato DD/MM/YYYY)
   if (f.dateStart || f.dateEnd) {
     const start = parseDate(f.dateStart);
     const end   = parseDate(f.dateEnd);
-    const DATE_COLS = ['Data de criação','created_at','Data','date','Data Criação'];
     crmRows = crmRows.filter(r => {
-      const colKey = DATE_COLS.find(c => r[c] !== undefined);
-      if (!colKey) return true;
-      const d = parseDate(r[colKey]);
+      const d = parseDate(r['Data']);
       if (!d) return true;
       if (start && d < start) return false;
       if (end   && d > end)   return false;
       return true;
     });
   }
-  if (f.criativo) {
-    crmRows = crmRows.filter(r => (r['utm_content'] || '').trim() === f.criativo);
-  }
 
-  // --- Re-render ---
+  // ── Re-render ──────────────────────────────────────────────
   const metaAgg  = aggregateMeta(metaRows);
   const leadsMap = buildLeadsMap(crmRows);
   const data     = mergeData(metaAgg, leadsMap);
@@ -761,8 +841,12 @@ async function init() {
     // Populate filter dropdowns
     populateFilters();
 
-    // Wire up filter change listeners
-    ['filter-praca','filter-criativo','filter-date-start','filter-date-end'].forEach(id => {
+    // Praça: re-popula criativos antes de re-renderizar
+    const elPraca = document.getElementById('filter-praca');
+    if (elPraca) elPraca.addEventListener('change', onPracaChange);
+
+    // Criativo e datas: apenas re-renderizam
+    ['filter-criativo','filter-date-start','filter-date-end'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', applyFilters);
     });
