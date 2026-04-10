@@ -189,35 +189,107 @@ function aggregateMeta(rows) {
 }
 
 // ============================================================
-// 4. Count CRM leads per utm_content (= Ad Name no Meta)
-//    Returns Map<utm_content, count>
-//    O campo utm_content do CRM corresponde ao Ad Name do Meta Ads
+// 4. Normaliza utm_content do CRM para uso como chave de join
+//    Valores inválidos (FALSE, nan, vazio) → string vazia
+// ============================================================
+const INVALID_UTM = new Set(['false', 'nan', '']);
+
+function normalizeUtmContent(val) {
+  const s = (val || '').trim();
+  return INVALID_UTM.has(s.toLowerCase()) ? '' : s;
+}
+
+// ============================================================
+// 5. Builds two structures from CRM rows:
+//    leadsMap  — Map<utm_content, count>  (para join com Meta)
+//    crmByUtm  — Map<utm_content, {count, adNameCRM, channel}>
+//                onde adNameCRM = utm_content legível e
+//                     channel   = utm_medium (ex: "institucional")
 // ============================================================
 function buildLeadsMap(crmRows) {
+  const leadsMap = new Map();
+  crmRows.forEach(r => {
+    const key = normalizeUtmContent(r['utm_content']);
+    if (!key) return;
+    leadsMap.set(key, (leadsMap.get(key) || 0) + 1);
+  });
+  return leadsMap;
+}
+
+/** Retorna Map<adNameCRM, {count, channel}> para todas as linhas CRM,
+ *  incluindo as sem utm_content válido (chave = '' para diretos). */
+function buildCRMGroups(crmRows) {
   const map = new Map();
   crmRows.forEach(r => {
-    const key = (r['utm_content'] || '').trim();
-    if (!key) return;
-    map.set(key, (map.get(key) || 0) + 1);
+    const key     = normalizeUtmContent(r['utm_content']);
+    const channel = (r['utm_medium'] || '').trim();
+    if (!map.has(key)) map.set(key, { count: 0, channel });
+    map.get(key).count += 1;
   });
   return map;
 }
 
 // ============================================================
-// 5. Merge Meta aggregates with CRM leads → final rows
-//    Join: Meta "Ad Name" === CRM "utm_content"
+// 6. Merge Meta aggregates + CRM groups → final rows
+//    • Linhas Meta que casam com CRM pelo Ad Name = utm_content
+//    • Linhas CRM-only (utm_content não existe no Meta ou é inválido)
 // ============================================================
-function mergeData(metaAgg, leadsMap) {
-  return metaAgg.map(a => {
-    // Exact match first, then case-insensitive fallback
+function mergeData(metaAgg, crmRows) {
+  const leadsMap  = buildLeadsMap(crmRows);
+  const crmGroups = buildCRMGroups(crmRows);
+
+  // ── Linhas que têm dados no Meta ──────────────────────────
+  const metaRows = metaAgg.map(a => {
     const leads =
       leadsMap.get(a.adName) ||
       leadsMap.get(a.adName.toLowerCase()) ||
       [...leadsMap.entries()].find(([k]) => k.toLowerCase() === a.adName.toLowerCase())?.[1] ||
       0;
+    // adNameCRM: utm_content que casou (usa o key exato do leadsMap)
+    const matchedKey =
+      leadsMap.has(a.adName)             ? a.adName :
+      leadsMap.has(a.adName.toLowerCase()) ? a.adName.toLowerCase() :
+      [...leadsMap.keys()].find(k => k.toLowerCase() === a.adName.toLowerCase()) || '';
+
     const cpl = leads > 0 ? a.spend / leads : null;
-    return { ...a, leads, cpl };
+    return {
+      ...a,
+      leads,
+      cpl,
+      adNameCRM: matchedKey || '',   // coluna "AD NAME (CRM)"
+      channel:   matchedKey ? (crmGroups.get(matchedKey)?.channel || '') : '',
+      crmOnly:   false,
+    };
   });
+
+  // ── Linhas CRM-only: utm_content que NÃO casa com nenhum Ad Name ──
+  const metaAdNames = new Set(metaAgg.map(a => a.adName.toLowerCase()));
+
+  const crmOnlyRows = [];
+  crmGroups.forEach(({ count, channel }, utmKey) => {
+    // Chave vazia = leads sem utm_content válido (diretos/institucionais)
+    const isMatched = utmKey !== '' && metaAdNames.has(utmKey.toLowerCase());
+    if (isMatched) return; // já coberto pelas linhas Meta
+
+    crmOnlyRows.push({
+      adName:       '',           // sem dados no Meta
+      campaignName: '',
+      adSetName:    '',
+      day:          '',
+      spend:        0,
+      impressions:  0,
+      clicks:       0,
+      cpm:          0,
+      ctr:          0,
+      leads:        count,
+      cpl:          null,
+      adNameCRM:    utmKey,       // pode ser '' (direto) ou valor sem Meta
+      channel,
+      crmOnly:      true,
+    });
+  });
+
+  return [...metaRows, ...crmOnlyRows];
 }
 
 // ============================================================
@@ -244,28 +316,55 @@ function renderTable(rows) {
   if (!tbody) return;
 
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:40px">Nenhum dado com "openday" na Campaign Name.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-secondary);padding:40px">Nenhum dado encontrado para os filtros selecionados.</td></tr>';
     return;
   }
 
-  // Sort by spend desc
-  const sorted = [...rows].sort((a, b) => b.spend - a.spend);
+  // Meta rows first (sorted by spend desc), then CRM-only rows (sorted by leads desc)
+  const metaRows   = [...rows].filter(r => !r.crmOnly).sort((a, b) => b.spend - a.spend);
+  const crmOnlyRows = [...rows].filter(r =>  r.crmOnly).sort((a, b) => b.leads - a.leads);
+  const sorted = [...metaRows, ...crmOnlyRows];
 
-  tbody.innerHTML = sorted.map(r => `
-    <tr>
-      <td>${r.day}</td>
-      <td title="${r.campaignName}">${trunc(r.campaignName, 22)}</td>
-      <td title="${r.adSetName}">${trunc(r.adSetName, 22)}</td>
-      <td title="${r.adName}">${trunc(r.adName, 32)}</td>
-      <td class="num">${fmtBRL(r.spend)}</td>
-      <td class="num">${fmtNum(r.impressions)}</td>
-      <td class="num">${fmtBRL(r.cpm)}</td>
-      <td class="num">${fmtNum(r.clicks)}</td>
-      <td class="num">${fmtPct(r.ctr)}</td>
+  tbody.innerHTML = sorted.map(r => {
+    // ── Coluna AD NAME (CRM) ──
+    // Prioridade: utm_content normalizado → canal (utm_medium) → "Direto"
+    const adNameCRM = r.adNameCRM
+      ? trunc(r.adNameCRM, 32)
+      : r.channel
+        ? `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`
+        : '<span style="color:var(--text-secondary);font-style:italic">Direto</span>';
+
+    // ── Células Meta (vazias para linhas CRM-only) ──
+    const dayCell      = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : r.day;
+    const campaignCell = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : `<span title="${r.campaignName}">${trunc(r.campaignName, 22)}</span>`;
+    const adSetCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : `<span title="${r.adSetName}">${trunc(r.adSetName, 22)}</span>`;
+    const adNameMeta   = r.crmOnly
+      ? '<span style="color:var(--text-secondary);font-style:italic">Sem dado Meta</span>'
+      : `<span title="${r.adName}">${trunc(r.adName, 32)}</span>`;
+
+    const spendCell  = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtBRL(r.spend);
+    const impCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtNum(r.impressions);
+    const cpmCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtBRL(r.cpm);
+    const clkCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtNum(r.clicks);
+    const ctrCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtPct(r.ctr);
+
+    return `
+    <tr class="${r.crmOnly ? 'row-crm-only' : ''}">
+      <td>${dayCell}</td>
+      <td>${campaignCell}</td>
+      <td>${adSetCell}</td>
+      <td>${adNameMeta}</td>
+      <td>${adNameCRM}</td>
+      <td class="num">${spendCell}</td>
+      <td class="num">${impCell}</td>
+      <td class="num">${cpmCell}</td>
+      <td class="num">${clkCell}</td>
+      <td class="num">${ctrCell}</td>
       <td class="num ${cplClass(r.cpl)}">${r.cpl !== null ? fmtBRL(r.cpl) : '—'}</td>
       <td class="num">${fmtNum(r.leads)}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function cplClass(cpl) {
@@ -689,9 +788,8 @@ function applyFilters() {
   }
 
   // ── Re-render ──────────────────────────────────────────────
-  const metaAgg  = aggregateMeta(metaRows);
-  const leadsMap = buildLeadsMap(crmRows);
-  const data     = mergeData(metaAgg, leadsMap);
+  const metaAgg = aggregateMeta(metaRows);
+  const data    = mergeData(metaAgg, crmRows);
 
   renderKPIs(data, crmRows);
   renderTable(data);
@@ -742,9 +840,8 @@ function filterByPeriod(metaRows, crmRows, dateStart, dateEnd) {
 }
 
 function computeKPISet(metaRows, crmRows) {
-  const metaAgg  = aggregateMeta(metaRows);
-  const leadsMap = buildLeadsMap(crmRows);
-  const data     = mergeData(metaAgg, leadsMap);
+  const metaAgg = aggregateMeta(metaRows);
+  const data    = mergeData(metaAgg, crmRows);
   const spend    = data.reduce((s, r) => s + r.spend, 0);
   const clicks   = data.reduce((s, r) => s + r.clicks, 0);
   const leads    = crmRows.length;

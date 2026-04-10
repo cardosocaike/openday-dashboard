@@ -204,6 +204,10 @@
         .insight-value  { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; word-break: break-word; }
         .insight-detail { font-size: 0.8rem; color: var(--text-secondary); }
 
+        /* ── CRM-only rows (sem dados no Meta) ── */
+        tr.row-crm-only td { background: rgba(79, 142, 247, 0.04); }
+        tr.row-crm-only:hover td { background: rgba(79, 142, 247, 0.08); }
+
         /* ── Status ── */
         #status-msg { text-align: center; padding: 48px; font-size: 0.9rem; display: none; }
 
@@ -338,6 +342,7 @@
                             <th>Campaign</th>
                             <th>Ad Set</th>
                             <th>Ad Name</th>
+                            <th>Ad Name (CRM)</th>
                             <th class="num">Investimento</th>
                             <th class="num">Impressões</th>
                             <th class="num">CPM</th>
@@ -349,7 +354,7 @@
                     </thead>
                     <tbody id="ads-tbody">
                         <tr>
-                            <td colspan="11" style="text-align:center;color:var(--text-secondary);padding:48px">
+                            <td colspan="12" style="text-align:center;color:var(--text-secondary);padding:48px">
                                 Carregando...
                             </td>
                         </tr>
