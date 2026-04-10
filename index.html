@@ -10,6 +10,162 @@
         header h1   { font-size: 1.1rem; }
         .subtitle   { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
 
+        /* ── Filters ── */
+        .filters-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: flex-end;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 160px;
+        }
+        .filter-group label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-secondary);
+        }
+        .filter-group select,
+        .filter-group input[type="date"] {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            padding: 7px 10px;
+            font-size: 0.88rem;
+            cursor: pointer;
+            min-width: 140px;
+        }
+        .filter-group select:focus,
+        .filter-group input[type="date"]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .filter-group input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.7);
+            cursor: pointer;
+        }
+        .filter-period-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .filter-period-row span {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .filter-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .filter-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.88rem;
+            color: var(--text-primary);
+            user-select: none;
+        }
+        .filter-checkbox input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--accent);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        /* ── Comparativo ── */
+        .compare-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 24px;
+            margin-bottom: 24px;
+            display: none;
+        }
+        .compare-section.visible { display: block; }
+        .compare-section h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 14px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+        .compare-periods {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .compare-period-block {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .compare-period-block .period-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+        }
+        .compare-period-block .period-inputs {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .compare-period-block .period-inputs span {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .compare-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .compare-kpi-col {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .compare-kpi-header {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: var(--text-secondary);
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+        .compare-kpi-item {
+            background: var(--bg-secondary);
+            border-radius: 7px;
+            padding: 12px 14px;
+        }
+        .compare-kpi-item .ck-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        .compare-kpi-item .ck-val { font-size: 1rem; font-weight: 700; }
+        .compare-kpi-item .ck-delta { font-size: 0.75rem; margin-top: 3px; }
+        .delta-up   { color: var(--success); }
+        .delta-down { color: var(--danger); }
+        .delta-flat { color: var(--text-secondary); }
+
         /* ── KPI cards ── */
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
         .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
@@ -77,6 +233,75 @@
 
 <main>
     <p id="status-msg">Carregando dados...</p>
+
+    <!-- ── Filters Bar ── -->
+    <div class="filters-bar" id="filters-bar">
+
+        <div class="filter-group">
+            <label for="filter-praca">Praça</label>
+            <select id="filter-praca">
+                <option value="">Todas as praças</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Período</label>
+            <div class="filter-period-row">
+                <input type="date" id="filter-date-start" title="Data inicial">
+                <span>até</span>
+                <input type="date" id="filter-date-end" title="Data final">
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label for="filter-criativo">Criativo (Ad Name)</label>
+            <select id="filter-criativo">
+                <option value="">Todos os criativos</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Opções</label>
+            <div style="display:flex;flex-direction:column;gap:8px;padding-top:2px">
+                <label class="filter-checkbox">
+                    <input type="checkbox" id="chk-compare" onchange="toggleComparativo(this.checked)">
+                    <span>Comparar períodos</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="filter-actions">
+            <button class="btn btn-ghost" onclick="clearFilters()">✕ Limpar filtros</button>
+        </div>
+
+    </div>
+
+    <!-- ── Comparativo de períodos ── -->
+    <div class="compare-section" id="compare-section">
+        <h3>Comparativo de Períodos</h3>
+        <div class="compare-periods">
+            <div class="compare-period-block">
+                <div class="period-label">Período A</div>
+                <div class="period-inputs">
+                    <input type="date" id="cmp-a-start">
+                    <span>até</span>
+                    <input type="date" id="cmp-a-end">
+                </div>
+            </div>
+            <div class="compare-period-block">
+                <div class="period-label">Período B</div>
+                <div class="period-inputs">
+                    <input type="date" id="cmp-b-start">
+                    <span>até</span>
+                    <input type="date" id="cmp-b-end">
+                </div>
+            </div>
+            <div class="filter-actions" style="align-self:flex-end">
+                <button class="btn btn-primary" onclick="applyComparativo()">Comparar</button>
+            </div>
+        </div>
+        <div class="compare-kpis" id="compare-kpis" style="display:none"></div>
+    </div>
 
     <!-- KPI Cards -->
     <div class="kpi-grid">
