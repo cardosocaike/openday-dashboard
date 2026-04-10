@@ -334,7 +334,7 @@ function renderTable(rows) {
       adNameCRMContent = '<span style="color:var(--text-secondary)">—</span>';
       adNameCRMTitle   = '';
     } else if (r.adNameCRM) {
-      adNameCRMContent = truncate(r.adNameCRM, 30);
+      adNameCRMContent = removePrefix(r.adNameCRM, AD_PREFIX);
       adNameCRMTitle   = r.adNameCRM;
     } else if (r.channel) {
       adNameCRMContent = `<span style="color:var(--text-secondary);font-style:italic">${r.channel}</span>`;
@@ -352,13 +352,12 @@ function renderTable(rows) {
     const clkCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtNum(r.clicks);
     const ctrCell    = r.crmOnly ? '<span style="color:var(--text-secondary)">—</span>' : fmtPct(r.ctr);
 
-    // Texto truncado + title no <td> para tooltip nativo
-    // removePrefix elimina "graduacao_grad-adm_" de Ad Set e Ad Name antes de truncar
-    const campaignTxt = r.crmOnly ? '—' : truncate(r.campaignName, 30);
-    const adSetTxt    = r.crmOnly ? '—' : truncate(removePrefix(r.adSetName,    AD_PREFIX), 25);
+    // Texto completo (sem truncamento) — title mantém valor original para tooltip
+    const campaignTxt = r.crmOnly ? '—' : r.campaignName;
+    const adSetTxt    = r.crmOnly ? '—' : removePrefix(r.adSetName, AD_PREFIX);
     const adNameTxt   = r.crmOnly
       ? '<span style="color:var(--text-secondary);font-style:italic">Sem dado Meta</span>'
-      : truncate(removePrefix(r.adName, AD_PREFIX), 35);
+      : removePrefix(r.adName, AD_PREFIX);
 
     return `
     <tr class="${r.crmOnly ? 'row-crm-only' : ''}">
