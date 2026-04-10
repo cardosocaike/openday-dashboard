@@ -324,6 +324,28 @@ function renderTable(rows) {
   const crmOnlyRows = [...rows].filter(r =>  r.crmOnly).sort((a, b) => b.leads - a.leads);
   const sorted = [...metaRows, ...crmOnlyRows];
 
+  // ── Totais ──
+  const totalSpend  = sorted.reduce((s, r) => s + r.spend,       0);
+  const totalImp    = sorted.reduce((s, r) => s + r.impressions,  0);
+  const totalClicks = sorted.reduce((s, r) => s + r.clicks,       0);
+  const totalLeads  = sorted.reduce((s, r) => s + r.leads,        0);
+  const avgCPM      = totalImp   > 0 ? (totalSpend / totalImp) * 1000 : 0;
+  const avgCTR      = totalClicks > 0 && totalImp > 0 ? (totalClicks / totalImp) * 100 : 0;
+  const totalCPL    = totalLeads > 0 ? totalSpend / totalLeads : null;
+
+  const totalsRow = `
+    <tr class="row-totals">
+      <td colspan="5"><strong>Total</strong></td>
+      <td class="num"><strong>${fmtBRL(totalSpend)}</strong></td>
+      <td class="num"><strong>${fmtNum(totalImp)}</strong></td>
+      <td class="num"><strong>${fmtBRL(avgCPM)}</strong></td>
+      <td class="num"><strong>${fmtNum(totalClicks)}</strong></td>
+      <td class="num"><strong>${fmtPct(avgCTR)}</strong></td>
+      <td class="num ${cplClass(totalCPL)}"><strong>${totalCPL !== null ? fmtBRL(totalCPL) : '—'}</strong></td>
+      <td class="num"><strong>${fmtNum(totalLeads)}</strong></td>
+    </tr>
+  `;
+
   tbody.innerHTML = sorted.map(r => {
     // ── Coluna AD NAME (CRM) ──
     // Caso 1 — Meta-only (sem leads CRM):      "—"
@@ -375,7 +397,7 @@ function renderTable(rows) {
       <td class="num">${fmtNum(r.leads)}</td>
     </tr>
   `;
-  }).join('');
+  }).join('') + totalsRow;
 }
 
 function cplClass(cpl) {
